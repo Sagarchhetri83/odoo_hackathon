@@ -17,10 +17,7 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
+    // For local development: skip auth check
     fetchKPIs();
   }, [filters]);
 
@@ -39,7 +36,7 @@ export default function Dashboard() {
     }
   };
 
-  if (!isAuthenticated()) return null;
+  // For local development: skip auth check
 
   return (
     <Layout>

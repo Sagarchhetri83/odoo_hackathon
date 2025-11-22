@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../components/Layout';
-import { adjustmentsAPI } from '../lib/api';
-import { isAuthenticated } from '../lib/auth';
+import { adjustmentsAPI, productsAPI, warehousesAPI } from '../lib/api';
 
 export default function AdjustmentsPage() {
   const router = useRouter();
   const [adjustments, setAdjustments] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -17,11 +18,9 @@ export default function AdjustmentsPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
     fetchAdjustments();
+    fetchProducts();
+    fetchWarehouses();
   }, []);
 
   const fetchAdjustments = async () => {
@@ -36,11 +35,30 @@ export default function AdjustmentsPage() {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await productsAPI.getAll();
+      setProducts(response.data);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    }
+  };
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await warehousesAPI.getAll();
+      setWarehouses(response.data);
+    } catch (err) {
+      console.error('Error fetching warehouses:', err);
+    }
+  };
+
   const handleCreateAdjustment = async (e) => {
     e.preventDefault();
     try {
       const adjustmentData = {
         ...newAdjustment,
+        warehouse_id: parseInt(newAdjustment.warehouse_id),
         adjustment_items: newAdjustment.adjustment_items.map(item => ({
           product_id: parseInt(item.product_id),
           counted_quantity: parseInt(item.counted_quantity),
@@ -51,12 +69,21 @@ export default function AdjustmentsPage() {
       setNewAdjustment({ warehouse_id: '', reason: '', adjustment_items: [{ product_id: '', counted_quantity: '', location_id: '' }] });
       setShowCreateForm(false);
       fetchAdjustments();
+      setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create adjustment');
     }
   };
 
-  if (!isAuthenticated()) return null;
+  const getProductName = (id) => {
+    const product = products.find(p => p.id === id);
+    return product ? `${product.name} (${product.sku_code})` : `Product #${id}`;
+  };
+
+  const getWarehouseName = (id) => {
+    const warehouse = warehouses.find(w => w.id === id);
+    return warehouse ? warehouse.name : `Warehouse #${id}`;
+  };
 
   return (
     <Layout>
@@ -88,20 +115,25 @@ export default function AdjustmentsPage() {
           <h2>Create Stock Adjustment</h2>
           <form onSubmit={handleCreateAdjustment}>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Warehouse ID *</label>
-              <input
-                type="number"
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Warehouse *</label>
+              <select
                 value={newAdjustment.warehouse_id}
                 onChange={(e) => setNewAdjustment({ ...newAdjustment, warehouse_id: e.target.value })}
                 required
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-              />
+              >
+                <option value="">Select Warehouse</option>
+                {warehouses.map(warehouse => (
+                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                ))}
+              </select>
             </div>
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Reason (optional)</label>
               <textarea
                 value={newAdjustment.reason}
                 onChange={(e) => setNewAdjustment({ ...newAdjustment, reason: e.target.value })}
+                placeholder="e.g., Physical count discrepancy, damaged goods, etc."
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px', minHeight: '80px' }}
               />
             </div>
@@ -109,9 +141,7 @@ export default function AdjustmentsPage() {
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Products</label>
               {newAdjustment.adjustment_items.map((item, index) => (
                 <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px', marginBottom: '10px' }}>
-                  <input
-                    type="number"
-                    placeholder="Product ID"
+                  <select
                     value={item.product_id}
                     onChange={(e) => {
                       const items = [...newAdjustment.adjustment_items];
@@ -120,7 +150,12 @@ export default function AdjustmentsPage() {
                     }}
                     required
                     style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
+                  >
+                    <option value="">Select Product</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>{product.name} ({product.sku_code})</option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     placeholder="Counted Quantity"
@@ -131,6 +166,7 @@ export default function AdjustmentsPage() {
                       setNewAdjustment({ ...newAdjustment, adjustment_items: items });
                     }}
                     required
+                    min="0"
                     style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                   />
                   <input
@@ -191,8 +227,9 @@ export default function AdjustmentsPage() {
             <thead>
               <tr style={{ backgroundColor: '#34495e', color: 'white' }}>
                 <th style={{ padding: '12px', textAlign: 'left' }}>ID</th>
-                <th style={{ padding: '12px', textAlign: 'left' }}>Warehouse ID</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Warehouse</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Reason</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Items</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Created At</th>
               </tr>
@@ -201,8 +238,15 @@ export default function AdjustmentsPage() {
               {adjustments.map((adjustment, index) => (
                 <tr key={adjustment.id} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
                   <td style={{ padding: '12px' }}>{adjustment.id}</td>
-                  <td style={{ padding: '12px' }}>{adjustment.warehouse_id}</td>
+                  <td style={{ padding: '12px' }}>{getWarehouseName(adjustment.warehouse_id)}</td>
                   <td style={{ padding: '12px' }}>{adjustment.reason || 'N/A'}</td>
+                  <td style={{ padding: '12px' }}>
+                    {adjustment.adjustment_items?.map(item => (
+                      <div key={item.id} style={{ fontSize: '12px' }}>
+                        {getProductName(item.product_id)}: {item.counted_quantity}
+                      </div>
+                    ))}
+                  </td>
                   <td style={{ padding: '12px' }}>
                     <span style={{
                       padding: '4px 8px',
@@ -227,4 +271,3 @@ export default function AdjustmentsPage() {
     </Layout>
   );
 }
-

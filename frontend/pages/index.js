@@ -1,17 +1,13 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { isAuthenticated } from '../lib/auth';
 
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthenticated()) {
-      router.push('/dashboard');
-    } else {
-      router.push('/login');
-    }
+    // For local development: directly go to dashboard
+    router.push('/dashboard');
   }, []);
 
-  return <div>Redirecting...</div>;
+  return <div>Redirecting to dashboard...</div>;
 }

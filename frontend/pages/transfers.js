@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../components/Layout';
-import { transfersAPI } from '../lib/api';
-import { isAuthenticated } from '../lib/auth';
+import { transfersAPI, productsAPI, warehousesAPI } from '../lib/api';
 
 export default function TransfersPage() {
   const router = useRouter();
   const [transfers, setTransfers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -18,11 +19,9 @@ export default function TransfersPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
     fetchTransfers();
+    fetchProducts();
+    fetchWarehouses();
   }, []);
 
   const fetchTransfers = async () => {
@@ -37,13 +36,32 @@ export default function TransfersPage() {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await productsAPI.getAll();
+      setProducts(response.data);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    }
+  };
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await warehousesAPI.getAll();
+      setWarehouses(response.data);
+    } catch (err) {
+      console.error('Error fetching warehouses:', err);
+    }
+  };
+
   const handleComplete = async (id) => {
     if (!confirm('Are you sure you want to complete this transfer? This will move stock between warehouses.')) return;
     try {
       await transfersAPI.complete(id);
       fetchTransfers();
+      setError(null);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to complete transfer');
+      setError(err.response?.data?.detail || 'Failed to complete transfer');
     }
   };
 
@@ -52,6 +70,8 @@ export default function TransfersPage() {
     try {
       const transferData = {
         ...newTransfer,
+        from_warehouse_id: parseInt(newTransfer.from_warehouse_id),
+        to_warehouse_id: parseInt(newTransfer.to_warehouse_id),
         transfer_items: newTransfer.transfer_items.map(item => ({
           product_id: parseInt(item.product_id),
           quantity: parseInt(item.quantity),
@@ -63,12 +83,21 @@ export default function TransfersPage() {
       setNewTransfer({ from_warehouse_id: '', to_warehouse_id: '', status: 'Draft', transfer_items: [{ product_id: '', quantity: '', from_location_id: '', to_location_id: '' }] });
       setShowCreateForm(false);
       fetchTransfers();
+      setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create transfer');
     }
   };
 
-  if (!isAuthenticated()) return null;
+  const getProductName = (id) => {
+    const product = products.find(p => p.id === id);
+    return product ? `${product.name} (${product.sku_code})` : `Product #${id}`;
+  };
+
+  const getWarehouseName = (id) => {
+    const warehouse = warehouses.find(w => w.id === id);
+    return warehouse ? warehouse.name : `Warehouse #${id}`;
+  };
 
   return (
     <Layout>
@@ -101,34 +130,40 @@ export default function TransfersPage() {
           <form onSubmit={handleCreateTransfer}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '15px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>From Warehouse ID *</label>
-                <input
-                  type="number"
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>From Warehouse *</label>
+                <select
                   value={newTransfer.from_warehouse_id}
                   onChange={(e) => setNewTransfer({ ...newTransfer, from_warehouse_id: e.target.value })}
                   required
                   style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
+                >
+                  <option value="">Select Warehouse</option>
+                  {warehouses.map(warehouse => (
+                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>To Warehouse ID *</label>
-                <input
-                  type="number"
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>To Warehouse *</label>
+                <select
                   value={newTransfer.to_warehouse_id}
                   onChange={(e) => setNewTransfer({ ...newTransfer, to_warehouse_id: e.target.value })}
                   required
                   style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                />
+                >
+                  <option value="">Select Warehouse</option>
+                  {warehouses.map(warehouse => (
+                    <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Products</label>
               {newTransfer.transfer_items.map((item, index) => (
                 <div key={index} style={{ marginBottom: '15px', padding: '15px', border: '1px solid #ddd', borderRadius: '4px' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                    <input
-                      type="number"
-                      placeholder="Product ID"
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '10px' }}>
+                    <select
                       value={item.product_id}
                       onChange={(e) => {
                         const items = [...newTransfer.transfer_items];
@@ -137,7 +172,12 @@ export default function TransfersPage() {
                       }}
                       required
                       style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    />
+                    >
+                      <option value="">Select Product</option>
+                      {products.map(product => (
+                        <option key={product.id} value={product.id}>{product.name} ({product.sku_code})</option>
+                      ))}
+                    </select>
                     <input
                       type="number"
                       placeholder="Quantity"
@@ -148,6 +188,7 @@ export default function TransfersPage() {
                         setNewTransfer({ ...newTransfer, transfer_items: items });
                       }}
                       required
+                      min="1"
                       style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                     />
                     <input
@@ -172,19 +213,19 @@ export default function TransfersPage() {
                       }}
                       style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                     />
+                    {newTransfer.transfer_items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const items = newTransfer.transfer_items.filter((_, i) => i !== index);
+                          setNewTransfer({ ...newTransfer, transfer_items: items });
+                        }}
+                        style={{ padding: '8px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
-                  {newTransfer.transfer_items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const items = newTransfer.transfer_items.filter((_, i) => i !== index);
-                        setNewTransfer({ ...newTransfer, transfer_items: items });
-                      }}
-                      style={{ marginTop: '10px', padding: '8px', backgroundColor: '#e74c3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      Remove
-                    </button>
-                  )}
                 </div>
               ))}
               <button
@@ -223,6 +264,7 @@ export default function TransfersPage() {
                 <th style={{ padding: '12px', textAlign: 'left' }}>From Warehouse</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>To Warehouse</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Items</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Created At</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Actions</th>
               </tr>
@@ -231,8 +273,8 @@ export default function TransfersPage() {
               {transfers.map((transfer, index) => (
                 <tr key={transfer.id} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
                   <td style={{ padding: '12px' }}>{transfer.id}</td>
-                  <td style={{ padding: '12px' }}>{transfer.from_warehouse_id}</td>
-                  <td style={{ padding: '12px' }}>{transfer.to_warehouse_id}</td>
+                  <td style={{ padding: '12px' }}>{getWarehouseName(transfer.from_warehouse_id)}</td>
+                  <td style={{ padding: '12px' }}>{getWarehouseName(transfer.to_warehouse_id)}</td>
                   <td style={{ padding: '12px' }}>
                     <span style={{
                       padding: '4px 8px',
@@ -243,6 +285,13 @@ export default function TransfersPage() {
                     }}>
                       {transfer.status}
                     </span>
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    {transfer.transfer_items?.map(item => (
+                      <div key={item.id} style={{ fontSize: '12px' }}>
+                        {getProductName(item.product_id)}: {item.quantity}
+                      </div>
+                    ))}
                   </td>
                   <td style={{ padding: '12px' }}>{new Date(transfer.created_at).toLocaleDateString()}</td>
                   <td style={{ padding: '12px' }}>

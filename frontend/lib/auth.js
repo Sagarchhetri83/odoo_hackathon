@@ -19,6 +19,9 @@ export const logout = () => {
 };
 
 export const isAuthenticated = () => {
-  return !!getAuthToken();
+  // For local development: always return true
+  return true;
+  // Original: return !!getAuthToken();
 };
+
 

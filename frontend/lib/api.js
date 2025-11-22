@@ -77,5 +77,17 @@ export const ledgerAPI = {
   getAll: (params) => api.get('/ledger', { params }),
 };
 
+// Warehouses API
+export const warehousesAPI = {
+  getAll: () => api.get('/warehouses'),
+};
+
+// Suppliers API
+export const suppliersAPI = {
+  getAll: () => api.get('/suppliers'),
+};
+
 export default api;
+
+
 

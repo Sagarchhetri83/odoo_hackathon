@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../components/Layout';
-import { deliveriesAPI } from '../lib/api';
-import { isAuthenticated } from '../lib/auth';
+import { deliveriesAPI, productsAPI, warehousesAPI } from '../lib/api';
 
 export default function DeliveriesPage() {
   const router = useRouter();
   const [deliveries, setDeliveries] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -17,11 +18,9 @@ export default function DeliveriesPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
     fetchDeliveries();
+    fetchProducts();
+    fetchWarehouses();
   }, []);
 
   const fetchDeliveries = async () => {
@@ -36,13 +35,32 @@ export default function DeliveriesPage() {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await productsAPI.getAll();
+      setProducts(response.data);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+    }
+  };
+
+  const fetchWarehouses = async () => {
+    try {
+      const response = await warehousesAPI.getAll();
+      setWarehouses(response.data);
+    } catch (err) {
+      console.error('Error fetching warehouses:', err);
+    }
+  };
+
   const handleValidate = async (id) => {
     if (!confirm('Are you sure you want to validate this delivery? This will decrease stock levels.')) return;
     try {
       await deliveriesAPI.validate(id);
       fetchDeliveries();
+      setError(null);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to validate delivery');
+      setError(err.response?.data?.detail || 'Failed to validate delivery');
     }
   };
 
@@ -51,6 +69,7 @@ export default function DeliveriesPage() {
     try {
       const deliveryData = {
         ...newDelivery,
+        warehouse_id: parseInt(newDelivery.warehouse_id),
         delivery_items: newDelivery.delivery_items.map(item => ({
           product_id: parseInt(item.product_id),
           quantity_delivered: parseInt(item.quantity_delivered),
@@ -60,12 +79,21 @@ export default function DeliveriesPage() {
       setNewDelivery({ warehouse_id: '', status: 'Draft', delivery_items: [{ product_id: '', quantity_delivered: '' }] });
       setShowCreateForm(false);
       fetchDeliveries();
+      setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create delivery');
     }
   };
 
-  if (!isAuthenticated()) return null;
+  const getProductName = (id) => {
+    const product = products.find(p => p.id === id);
+    return product ? `${product.name} (${product.sku_code})` : `Product #${id}`;
+  };
+
+  const getWarehouseName = (id) => {
+    const warehouse = warehouses.find(w => w.id === id);
+    return warehouse ? warehouse.name : `Warehouse #${id}`;
+  };
 
   return (
     <Layout>
@@ -97,22 +125,24 @@ export default function DeliveriesPage() {
           <h2>Create New Delivery Order</h2>
           <form onSubmit={handleCreateDelivery}>
             <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Warehouse ID *</label>
-              <input
-                type="number"
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Warehouse *</label>
+              <select
                 value={newDelivery.warehouse_id}
                 onChange={(e) => setNewDelivery({ ...newDelivery, warehouse_id: e.target.value })}
                 required
                 style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-              />
+              >
+                <option value="">Select Warehouse</option>
+                {warehouses.map(warehouse => (
+                  <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>
+                ))}
+              </select>
             </div>
             <div style={{ marginBottom: '15px' }}>
               <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Products</label>
               {newDelivery.delivery_items.map((item, index) => (
                 <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '10px', marginBottom: '10px' }}>
-                  <input
-                    type="number"
-                    placeholder="Product ID"
+                  <select
                     value={item.product_id}
                     onChange={(e) => {
                       const items = [...newDelivery.delivery_items];
@@ -121,7 +151,12 @@ export default function DeliveriesPage() {
                     }}
                     required
                     style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
+                  >
+                    <option value="">Select Product</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>{product.name} ({product.sku_code})</option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     placeholder="Quantity"
@@ -132,6 +167,7 @@ export default function DeliveriesPage() {
                       setNewDelivery({ ...newDelivery, delivery_items: items });
                     }}
                     required
+                    min="1"
                     style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                   />
                   {newDelivery.delivery_items.length > 1 && (
@@ -181,8 +217,9 @@ export default function DeliveriesPage() {
             <thead>
               <tr style={{ backgroundColor: '#34495e', color: 'white' }}>
                 <th style={{ padding: '12px', textAlign: 'left' }}>ID</th>
-                <th style={{ padding: '12px', textAlign: 'left' }}>Warehouse ID</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Warehouse</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Status</th>
+                <th style={{ padding: '12px', textAlign: 'left' }}>Items</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Created At</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Actions</th>
               </tr>
@@ -191,7 +228,7 @@ export default function DeliveriesPage() {
               {deliveries.map((delivery, index) => (
                 <tr key={delivery.id} style={{ backgroundColor: index % 2 === 0 ? '#f8f9fa' : 'white' }}>
                   <td style={{ padding: '12px' }}>{delivery.id}</td>
-                  <td style={{ padding: '12px' }}>{delivery.warehouse_id}</td>
+                  <td style={{ padding: '12px' }}>{getWarehouseName(delivery.warehouse_id)}</td>
                   <td style={{ padding: '12px' }}>
                     <span style={{
                       padding: '4px 8px',
@@ -202,6 +239,13 @@ export default function DeliveriesPage() {
                     }}>
                       {delivery.status}
                     </span>
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    {delivery.delivery_items?.map(item => (
+                      <div key={item.id} style={{ fontSize: '12px' }}>
+                        {getProductName(item.product_id)}: {item.quantity_delivered}
+                      </div>
+                    ))}
                   </td>
                   <td style={{ padding: '12px' }}>{new Date(delivery.created_at).toLocaleDateString()}</td>
                   <td style={{ padding: '12px' }}>

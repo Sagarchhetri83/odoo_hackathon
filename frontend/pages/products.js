@@ -19,18 +19,37 @@ export default function ProductsPage() {
     category_id: '',
     unit_of_measure: '',
     initial_stock: 0,
+    reorder_point: 0,
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
     fetchProducts();
-    // In a real app, you'd fetch categories from an API
-    // For now, we'll use placeholder categories
-    setCategories([{ id: 1, name: 'Electronics' }, { id: 2, name: 'Furniture' }, { id: 3, name: 'Raw Materials' }]);
+    fetchCategories();
   }, []);
+
+  const fetchCategories = async () => {
+    try {
+      // Fetch products to extract unique categories
+      const response = await productsAPI.getAll();
+      const uniqueCategories = {};
+      response.data.forEach(product => {
+        if (product.category && !uniqueCategories[product.category.id]) {
+          uniqueCategories[product.category.id] = product.category;
+        }
+      });
+      setCategories(Object.values(uniqueCategories));
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      // Fallback to default categories
+      setCategories([
+        { id: 1, name: 'Electronics' },
+        { id: 2, name: 'Furniture' },
+        { id: 3, name: 'Raw Materials' },
+        { id: 4, name: 'Tools' },
+        { id: 5, name: 'Office Supplies' }
+      ]);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -53,16 +72,25 @@ export default function ProductsPage() {
   const handleCreateProduct = async (e) => {
     e.preventDefault();
     try {
-      await productsAPI.create(newProduct);
-      setNewProduct({ name: '', sku_code: '', category_id: '', unit_of_measure: '', initial_stock: 0 });
+      // Ensure category_id is an integer
+      const productData = {
+        ...newProduct,
+        category_id: parseInt(newProduct.category_id),
+        initial_stock: parseInt(newProduct.initial_stock) || 0,
+        reorder_point: parseInt(newProduct.reorder_point) || 0,
+      };
+      await productsAPI.create(productData);
+      setNewProduct({ name: '', sku_code: '', category_id: '', unit_of_measure: '', initial_stock: 0, reorder_point: 0 });
       setShowCreateForm(false);
       fetchProducts();
+      fetchCategories(); // Refresh categories in case a new one was added
+      setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create product');
     }
   };
 
-  if (!isAuthenticated()) return null;
+  // Authentication bypassed for local development
 
   return (
     <Layout>
@@ -170,6 +198,18 @@ export default function ProductsPage() {
                   type="number"
                   value={newProduct.initial_stock}
                   onChange={(e) => setNewProduct({ ...newProduct, initial_stock: parseInt(e.target.value) || 0 })}
+                  min="0"
+                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Reorder Point</label>
+                <input
+                  type="number"
+                  value={newProduct.reorder_point}
+                  onChange={(e) => setNewProduct({ ...newProduct, reorder_point: parseInt(e.target.value) || 0 })}
+                  min="0"
+                  placeholder="Alert when stock falls below this"
                   style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                 />
               </div>

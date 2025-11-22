@@ -18,10 +18,6 @@ export default function LedgerPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/login');
-      return;
-    }
     fetchLedger();
   }, [filters]);
 
@@ -40,7 +36,7 @@ export default function LedgerPage() {
     }
   };
 
-  if (!isAuthenticated()) return null;
+  // Authentication bypassed for local development
 
   return (
     <Layout>
@@ -161,4 +157,5 @@ export default function LedgerPage() {
     </Layout>
   );
 }
+
 
