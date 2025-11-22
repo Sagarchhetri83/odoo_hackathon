@@ -1,0 +1,52 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/stockmaster
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: super-secret-key # TODO: Replace with a strong, securely generated key
+    depends_on:
+      - db
+      - redis
+    networks:
+      - stockmaster_network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    environment:
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - stockmaster_network
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: stockmaster
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - stockmaster_network
+
+  redis:
+    image: redis:6-alpine
+    networks:
+      - stockmaster_network
+
+volumes:
+  db_data:
+
+networks:
+  stockmaster_network:
+    driver: bridge

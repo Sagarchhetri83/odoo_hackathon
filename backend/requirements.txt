@@ -1,0 +1,14 @@
+fastapi==0.70.0
+uvicorn==0.15.0
+SQLAlchemy==1.4.27
+psycopg2-binary==2.9.3
+aiohttp==3.8.1
+redis==4.0.0
+python-jose[cryptography]==3.3.0
+bcrypt==3.2.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.5
+pydantic[email]
+email-validator
+pytest==6.2.5
+httpx==0.19.0
